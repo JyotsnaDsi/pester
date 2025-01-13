@@ -1,3 +1,3 @@
-module github.com/sethgrid/pester
+module github.com/JyotsnaDsi/pester
 
-go 1.14
+go 1.22.5

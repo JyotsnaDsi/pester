@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -27,7 +26,7 @@ const (
 	contentTypeFormURLEncoded = "application/x-www-form-urlencoded"
 )
 
-//ErrUnexpectedMethod occurs when an http.Client method is unable to be mapped from a calling method in the pester client
+// ErrUnexpectedMethod occurs when an http.Client method is unable to be mapped from a calling method in the pester client
 var ErrUnexpectedMethod = errors.New("unexpected client method, must be one of Do, Get, Head, Post, or PostFrom")
 
 // ErrReadingBody happens when we cannot read the body bytes
@@ -100,6 +99,12 @@ type params struct {
 }
 
 var random *rand.Rand
+
+type responseContextKey int
+
+const (
+	RequestResponseID responseContextKey = iota
+)
 
 func init() {
 	random = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -189,7 +194,7 @@ func (c *Client) Wait() {
 }
 
 func (c *Client) copyBody(src io.ReadCloser) ([]byte, error) {
-	b, err := ioutil.ReadAll(src)
+	b, err := io.ReadAll(src)
 	if err != nil {
 		return nil, ErrReadingRequestBody
 	}
@@ -346,6 +351,10 @@ func (c *Client) pester(p params) (*http.Response, error) {
 				}
 
 				loggingContext := req.Context()
+				if resp != nil {
+					loggingContext = context.WithValue(loggingContext, RequestResponseID, resp.StatusCode)
+				}
+
 				c.log(
 					loggingContext,
 					ErrEntry{
@@ -412,7 +421,7 @@ func (c *Client) pester(p params) (*http.Response, error) {
 				} else if res.resp != nil {
 					// we only return one result to the caller; close all other response bodies that come back
 					// drain the body before close as to not prevent keepalive. see https://gist.github.com/mholt/eba0f2cc96658be0f717
-					io.Copy(ioutil.Discard, res.resp.Body)
+					io.Copy(io.Discard, res.resp.Body)
 					res.resp.Body.Close()
 				}
 			case <-allRequestsBackCh:
@@ -494,12 +503,12 @@ func (c *Client) Head(url string) (resp *http.Response, err error) {
 
 // Post provides the same functionality as http.Client.Post
 func (c *Client) Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error) {
-	return c.pester(params{method: methodPost, url: url, bodyType: bodyType, body: ioutil.NopCloser(body), verb: http.MethodPost})
+	return c.pester(params{method: methodPost, url: url, bodyType: bodyType, body: io.NopCloser(body), verb: http.MethodPost})
 }
 
 // PostForm provides the same functionality as http.Client.PostForm
 func (c *Client) PostForm(url string, data url.Values) (resp *http.Response, err error) {
-	return c.pester(params{method: methodPostForm, url: url, bodyType: contentTypeFormURLEncoded, body: ioutil.NopCloser(strings.NewReader(data.Encode())), verb: http.MethodPost})
+	return c.pester(params{method: methodPostForm, url: url, bodyType: contentTypeFormURLEncoded, body: io.NopCloser(strings.NewReader(data.Encode())), verb: http.MethodPost})
 }
 
 // set RetryOnHTTP429 for clients,
